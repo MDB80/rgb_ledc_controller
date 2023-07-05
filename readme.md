@@ -112,4 +112,18 @@ void app_main(void)
         rgb_led_set_color(&led1,VIOLET);
     }
 }
-
+```
+## Output
+```
+I (1307) gpio: GPIO[18]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0
+I (1316) gpio: GPIO[19]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0
+I (1325) gpio: GPIO[20]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0
+I (1335) LED_RGB: Started breath effect for LED
+I (6340) LED_RGB: Breath effect stopped for LED
+I (11340) LED_RGB: Blink effect stopped for LED
+I (11340) LED_RGB: Started breath effect for LED
+I (16340) LED_RGB: Breath effect stopped for LED
+I (21340) LED_RGB: Blink effect stopped for LED
+I (21340) LED_RGB: Transition effect started for LED
+I (26340) LED_RGB: Transition effect stopped for LED
+```
