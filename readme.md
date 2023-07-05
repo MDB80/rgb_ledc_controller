@@ -38,7 +38,7 @@ Follow the steps below to install the RGB LED Controller library:
 
 ## Documentation
 
-Technical documentation for the RGB LED Controller Library is available [here](html/index.html). It provides detailed information about the library's usage, API reference, and examples.
+Technical documentation for the RGB LED Controller Library is available [here](https://mdb80.github.io/rgb_ledc_controller/html/index.html). It provides detailed information about the library's usage, API reference, and examples.
 
 We encourage you to refer to the documentation for a better understanding of the library's capabilities and how to integrate it into your ESP32 projects.
 

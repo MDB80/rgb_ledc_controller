@@ -51,5 +51,3 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-#documentation
-/html/
