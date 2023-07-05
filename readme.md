@@ -58,8 +58,6 @@ Thank you for your support!
 
 ## Example
 
-Before using the RGB LED, the PWM interface needs to be configured:
-
 ```c
 
 #include "rgb_ledc_controller.h" // Include the header file for the RGB LED functions
