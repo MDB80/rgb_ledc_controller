@@ -110,6 +110,7 @@ void app_main(void)
 
         // Set the LED color Fixed to Violet
         rgb_led_set_color(&led1,VIOLET);
+        vTaskDelay(pdMS_TO_TICKS(5000)); // Delay for 5 seconds
     }
 }
 ```
