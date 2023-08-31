@@ -116,13 +116,14 @@ extern "C"
      * @param current_color The current color of the LED in RGB format (e.g., 0xRRGGBB).
      * @param new_color The new color to transition the LED to in RGB format.
      * @param effect_duration The duration of the color transition in milliseconds.
+     * @param callback Function pointer to the callback triggered after transition completion.
      *
      * @return
      *     - ESP_OK if successful
      *     - ESP_FAIL if a transition is already in progress
      *     - Other error codes if an error occurred
      */
-    esp_err_t rgb_led_start_transition_effect(rgb_led_t *rgb_led, uint32_t current_color, uint32_t new_color, uint32_t effect_duration);
+    esp_err_t rgb_led_start_transition_effect(rgb_led_t *rgb_led, uint32_t current_color, uint32_t new_color, uint32_t effect_duration, void (*callback)(rgb_led_t *));
 
     /**
      * @brief Start the breath effect for the specified LED.

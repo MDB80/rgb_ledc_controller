@@ -2,7 +2,7 @@
  * @file rgb_ledc_controller.c
  * @author Massimo Dalla Bona
  * @date 04.07.2023
-*  @version 1.0
+ *  @version 1.0
  * @brief File containing the implementation of the RGB LED control library.
  *
  * This library provides an interface to control multiple RGB LEDs independently
@@ -51,9 +51,10 @@ typedef enum
 // This structure represents the transition effect data for an RGB LED.
 typedef struct
 {
-    rgb_led_t *led;           // Pointer to the RGB LED
-    esp_timer_handle_t timer; // Timer handle for the transition effect
-    uint32_t color;           // Color of the transition effect
+    rgb_led_t *led;                // Pointer to the RGB LED
+    esp_timer_handle_t timer;      // Timer handle for the transition effect
+    uint32_t color;                // Color of the transition effect
+    void (*callback)(rgb_led_t *); // Callback function
 } rgb_led_transition_t;
 
 // RGB LED Breath Structure
@@ -152,6 +153,8 @@ static esp_err_t setup_ledc(int led_gpio, ledc_channel_t led_channel)
         .hpoint = 0,
         .timer_sel = LEDC_TIMER_0};
 
+    ledc_fade_func_install(NULL);
+
     // Set the configuration
     return ledc_channel_config(&ledc_channel_cfg);
 }
@@ -185,13 +188,9 @@ static esp_err_t set_color(rgb_led_t *rgb_led, uint32_t color)
     // Set the duty cycle for each LED. The duty cycle is proportional to the color
     // component value. Since the LEDC timer resolution is 8 bits, we can use the color
     // component value directly.
-    ESP_RETURN_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, rgb_led->red_channel, red), TAG, "Failed to set red duty");
-    ESP_RETURN_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, rgb_led->green_channel, green), TAG, "Failed to set green duty");
-    ESP_RETURN_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, rgb_led->blue_channel, blue), TAG, "Failed to set blue duty");
-
-    ESP_RETURN_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, rgb_led->red_channel), TAG, "Failed to update red duty");
-    ESP_RETURN_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, rgb_led->green_channel), TAG, "Failed to update green duty");
-    ESP_RETURN_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, rgb_led->blue_channel), TAG, "Failed to update blue duty");
+    ESP_RETURN_ON_ERROR(ledc_set_duty_and_update(LEDC_HIGH_SPEED_MODE, rgb_led->red_channel, red, 0), TAG, "Failed to set red duty");
+    ESP_RETURN_ON_ERROR(ledc_set_duty_and_update(LEDC_HIGH_SPEED_MODE, rgb_led->green_channel, green, 0), TAG, "Failed to set green duty");
+    ESP_RETURN_ON_ERROR(ledc_set_duty_and_update(LEDC_HIGH_SPEED_MODE, rgb_led->blue_channel, blue, 0), TAG, "Failed to set blue duty");
 
     return ESP_OK;
 }
@@ -225,16 +224,15 @@ esp_err_t rgb_led_init(rgb_led_t *rgb_led_cfg)
     ESP_GOTO_ON_FALSE(GPIO_IS_VALID_OUTPUT_GPIO(led.blue_pin), ESP_ERR_INVALID_ARG, err, TAG, "Invalid blue_pin");
 
     // Configure the GPIO pins for output
-    ESP_ERROR_CHECK(gpio_reset_pin(led.red_pin));
+    // ESP_ERROR_CHECK(gpio_reset_pin(led.red_pin));
     ESP_ERROR_CHECK(gpio_set_direction(led.red_pin, GPIO_MODE_OUTPUT));
 
-    ESP_ERROR_CHECK(gpio_reset_pin(led.green_pin));
+    // ESP_ERROR_CHECK(gpio_reset_pin(led.green_pin));
     ESP_ERROR_CHECK(gpio_set_direction(led.green_pin, GPIO_MODE_OUTPUT));
 
-    ESP_ERROR_CHECK(gpio_reset_pin(led.blue_pin));
+    // ESP_ERROR_CHECK(gpio_reset_pin(led.blue_pin));
     ESP_ERROR_CHECK(gpio_set_direction(led.blue_pin, GPIO_MODE_OUTPUT));
 
-    // Set the initial color to blue
     ESP_ERROR_CHECK(gpio_set_level(led.red_pin, 0));
     ESP_ERROR_CHECK(gpio_set_level(led.green_pin, 0));
     ESP_ERROR_CHECK(gpio_set_level(led.blue_pin, 0));
@@ -487,14 +485,6 @@ esp_err_t rgb_led_stop_breath_effect(rgb_led_t *led)
             return err;
         }
 
-        // Turn off the LED
-        err = set_color(led, COLOR_BLACK);
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Failed to turn off LED: %s", esp_err_to_name(err));
-            return err;
-        }
-
         // Reset the breath effect data and effect state
         memset(&led_effects[i].breath_effect, 0, sizeof(rgb_led_breath_t));
         led_effects[i].effect_state = RGB_LED_EFFECT_NONE;
@@ -528,6 +518,10 @@ static void transition_effect_callback(void *arg)
     // Set the LED color to the previous color
     set_color(led, previous_color);
 
+    // Invoke the callback after transition
+    if (transition_data->callback)
+        transition_data->callback(led);
+
     // Update the flag to indicate that the color transition is no longer active
     rgb_led_stop_transition_effect(led);
 }
@@ -547,29 +541,19 @@ static void breath_effect_callback(void *arg)
     // Extract the color from the breath effect data
     uint32_t color = breath_data->color;
 
-    // Extract the red, green, and blue components from the color value
-    uint8_t red = color >> 16;
-    uint8_t green = (color >> 8) & 0xFF;
-    uint8_t blue = color & 0xFF;
+    // Pre-compute the brightness factor
+    float brightness_factor = breath_data->brightness;
 
-    // ESP_LOGI("RGB_LED", "R:%02x G:%02x B:%02x", red, green, blue);
+    // Extract and calculate the duty cycles directly
+    uint8_t red_duty_cycle = (uint8_t)(brightness_factor * MIN((color >> 16), 255));
+    uint8_t green_duty_cycle = (uint8_t)(brightness_factor * MIN(((color >> 8) & 0xFF), 255));
+    uint8_t blue_duty_cycle = (uint8_t)(brightness_factor * MIN((color & 0xFF), 255));
 
-    // Calculate the duty cycle based on the brightness
-    uint8_t red_duty_cycle = (uint8_t)(breath_data->brightness * MIN(red, 255));
-    uint8_t green_duty_cycle = (uint8_t)(breath_data->brightness * MIN(green, 255));
-    uint8_t blue_duty_cycle = (uint8_t)(breath_data->brightness * MIN(blue, 255));
-
-    // ESP_LOGI("RGB_LED", "R:%02x G:%02x B:%02x", red_duty_cycle, green_duty_cycle, blue_duty_cycle);
+    // Recombine
+    color = ((uint32_t)red_duty_cycle << 16) | ((uint32_t)green_duty_cycle << 8) | blue_duty_cycle;
 
     // Set the duty cycle for each LED channel
-    ESP_GOTO_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->red_channel, red_duty_cycle), err, TAG, "Failed to set red duty cycle");
-    ESP_GOTO_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->green_channel, green_duty_cycle), err, TAG, "Failed to set green duty cycle");
-    ESP_GOTO_ON_ERROR(ledc_set_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->blue_channel, blue_duty_cycle), err, TAG, "Failed to set blue duty cycle");
-
-    // Update the duty cycles
-    ESP_GOTO_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->red_channel), err, TAG, "Failed to update red duty cycle");
-    ESP_GOTO_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->green_channel), err, TAG, "Failed to update green duty cycle");
-    ESP_GOTO_ON_ERROR(ledc_update_duty(LEDC_HIGH_SPEED_MODE, breath_data->led->blue_channel), err, TAG, "Failed to update blue duty cycle");
+    set_color(breath_data->led, color);
 
     // Adjust the brightness for the next step
     breath_data->brightness += breath_data->step;
@@ -579,13 +563,6 @@ static void breath_effect_callback(void *arg)
     {
         breath_data->step *= -1;
     }
-
-    // ESP_LOGI("RGB_LED", "brightness: %f", breath_data->brightness);
-
-    return;
-
-err:
-    ESP_LOGE(TAG, "Breath effect error: %s", esp_err_to_name(ret));
 }
 
 /**
@@ -643,21 +620,25 @@ static void blink_timer_callback(void *arg)
 }
 
 /**
- * @brief Initiates a transition effect for the RGB LED.
+ * @brief Set the color of an RGB LED with a smooth transition effect.
  *
- * This function transitions the RGB LED from the current color to the new color over a specified duration.
+ * This function sets the color of an RGB LED and smoothly transitions it to the new color over the specified transition duration.
+ * The function takes the RGB LED configuration, the current color, the new color, and the duration of the transition in milliseconds.
+ * It sets the LED to the new color and creates a timer to gradually transition it back to the previous color after the specified duration.
+ * The previous color is stored and used in the transition callback function.
  *
- * @param led The RGB LED pointer.
- * @param current_color The current color of the LED.
- * @param new_color The target color to transition to.
- * @param effect_duration The duration of the transition effect in milliseconds.
+ * @param rgb_led Pointer to the rgb_led_t structure that contains the configuration of the RGB LED.
+ * @param current_color The current color of the LED in RGB format (e.g., 0xRRGGBB).
+ * @param new_color The new color to transition the LED to in RGB format.
+ * @param effect_duration The duration of the color transition in milliseconds.
+ * @param callback Function pointer to the callback triggered after transition completion.
+ *
  * @return
- *     - ESP_OK if the transition effect was successfully started.
- *     - ESP_ERR_INVALID_ARG if the LED pointer is invalid.
- *     - ESP_FAIL if the LED is not found.
- *     - An error code if there was an issue creating or starting the timer.
+ *     - ESP_OK if successful
+ *     - ESP_FAIL if a transition is already in progress
+ *     - Other error codes if an error occurred
  */
-esp_err_t rgb_led_start_transition_effect(rgb_led_t *rgb_led, uint32_t current_color, uint32_t new_color, uint32_t effect_duration)
+esp_err_t rgb_led_start_transition_effect(rgb_led_t *rgb_led, uint32_t current_color, uint32_t new_color, uint32_t effect_duration, void (*callback)(rgb_led_t *))
 {
     if (!rgb_led)
     {
@@ -680,6 +661,8 @@ esp_err_t rgb_led_start_transition_effect(rgb_led_t *rgb_led, uint32_t current_c
 
     // Set the LED color to the new color
     set_color(rgb_led, new_color);
+
+    led_effects[i].transition_effect.callback = callback;
 
     // Create a timer to transition the color back to the previous color after the specified duration
     esp_timer_handle_t timer;
@@ -912,7 +895,6 @@ esp_err_t rgb_led_stop_any_effect(rgb_led_t *rgb_led)
     default:
     }
     led_effects[index].effect_state = RGB_LED_EFFECT_NONE;
-    set_color(rgb_led, COLOR_BLACK);
     return ESP_OK;
 }
 
