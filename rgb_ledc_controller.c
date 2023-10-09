@@ -751,6 +751,7 @@ esp_err_t rgb_led_start_breath_effect(rgb_led_t *rgb_led, uint32_t color, uint16
         led_effects[i].breath_effect.led = rgb_led;
         led_effects[i].breath_effect.color = color;
         led_effects[i].breath_effect.timer = timer;
+        led_effects[i].breath_effect.brightness = 0;
         led_effects[i].effect_state = RGB_LED_EFFECT_BREATH;
         ESP_LOGI(TAG, "Started breath effect for LED");
 
